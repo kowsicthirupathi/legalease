@@ -1,0 +1,33 @@
+# Python virtual environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment variables / API keys
+.env
+
+# Local database
+*.db
+
+# Streamlit
+.streamlit/
+
+# Old React / Vite project files
+node_modules/
+dist/
+src/
+public/
+package.json
+package-lock.json
+tsconfig.app.json
+tsconfig.json
+tsconfig.node.json
+vite.config.js
+*.test.*
+*.config.*
+
+# Test files
+test.pdf
+index.html
