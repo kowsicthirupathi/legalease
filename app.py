@@ -8,537 +8,221 @@ from docx import Document
 from fpdf import FPDF
 
 
-# ============================================================
-# DOCX GENERATOR
-# ============================================================
+BACKEND_URL = "https://legalease-api-kciy.onrender.com/generate"
 
-def create_docx(document_text):
-
-    document = Document()
-
-    document_text = str(document_text)
-
-    for line in document_text.splitlines():
-        document.add_paragraph(line)
-
-    output = BytesIO()
-
-    document.save(output)
-
-    output.seek(0)
-
-    return output.getvalue()
-
-
-# ============================================================
-# PDF TEXT CLEANER
-# ============================================================
-
-def prepare_pdf_text(text):
-
-    text = str(text)
-
-    # Replace common Unicode punctuation
-    replacements = {
-        "\u2013": "-",
-        "\u2014": "-",
-        "\u2018": "'",
-        "\u2019": "'",
-        "\u201c": '"',
-        "\u201d": '"',
-        "\u2022": "-",
-        "\u00a0": " ",
-        "\u2026": "...",
-    }
-
-    for old, new in replacements.items():
-        text = text.replace(old, new)
-
-    # Convert remaining unsupported characters
-    text = text.encode(
-        "latin-1",
-        "replace"
-    ).decode(
-        "latin-1"
-    )
-
-    return text
-
-
-# ============================================================
-# PDF LINE WRAPPER
-# ============================================================
-
-def split_long_words(text, max_length=70):
-
-    words = text.split(" ")
-
-    result = []
-
-    for word in words:
-
-        if len(word) <= max_length:
-
-            result.append(word)
-
-        else:
-
-            # Break extremely long words
-            # so FPDF always has a break point.
-
-            chunks = [
-                word[i:i + max_length]
-                for i in range(
-                    0,
-                    len(word),
-                    max_length
-                )
-            ]
-
-            result.extend(chunks)
-
-    return " ".join(result)
-
-
-# ============================================================
-# PDF GENERATOR
-# ============================================================
-
-def create_pdf(document_text):
-
-    pdf = FPDF(
-        format="A4"
-    )
-
-    pdf.set_margins(
-        15,
-        15,
-        15
-    )
-
-    pdf.set_auto_page_break(
-        auto=True,
-        margin=15
-    )
-
-    pdf.add_page()
-
-    pdf.set_font(
-        "Helvetica",
-        size=11
-    )
-
-    # Calculate safe printable width
-    usable_width = (
-        pdf.w
-        - pdf.l_margin
-        - pdf.r_margin
-    )
-
-    # Clean the generated document
-    safe_text = prepare_pdf_text(
-        document_text
-    )
-
-    # Process every line
-    for original_line in safe_text.splitlines():
-
-        # Remove problematic control characters
-        line = re.sub(
-            r"[\x00-\x08\x0b\x0c\x0e-\x1f]",
-            "",
-            original_line
-        )
-
-        # Empty line
-        if not line.strip():
-
-            pdf.ln(5)
-
-            continue
-
-        # Break very long words
-        line = split_long_words(
-            line,
-            max_length=70
-        )
-
-        # Render using explicit width
-        pdf.multi_cell(
-            usable_width,
-            7,
-            line
-        )
-
-    # Return PDF as bytes
-    return bytes(
-        pdf.output()
-    )
-
-
-# ============================================================
-# STREAMLIT PAGE CONFIGURATION
-# ============================================================
 
 st.set_page_config(
-
     page_title="LegalEase",
-
     page_icon="⚖️",
-
     layout="wide"
 )
 
 
-# ============================================================
-# HEADER
-# ============================================================
-
-st.title(
-    "⚖️ LegalEase"
-)
-
-st.subheader(
-    "AI-Powered Legal Document Generator"
-)
+st.title("⚖️ LegalEase")
+st.subheader("AI-Powered Legal Document Generator")
 
 st.write(
-    "Create customizable legal documents quickly using Gemini AI."
+    "Generate customizable legal documents using Generative AI."
 )
 
-st.divider()
-
-
-# ============================================================
-# DOCUMENT TYPE
-# ============================================================
 
 document_type = st.selectbox(
-
     "Document Type",
-
     [
         "Employment Contract",
         "Lease Agreement",
-        "Non-Disclosure Agreement (NDA)",
-        "Service Agreement",
-        "Partnership Agreement"
+        "Non-Disclosure Agreement (NDA)"
     ]
 )
 
 
-# ============================================================
-# PARTIES
-# ============================================================
-
 parties = st.text_area(
-
     "Parties",
-
-    placeholder=
-    "Example: ABC Company and John Doe"
+    placeholder="Example: ABC Technologies Pvt Ltd and John Doe"
 )
 
-
-# ============================================================
-# TERMS
-# ============================================================
-
-terms = st.text_area(
-
-    "Terms & Conditions",
-
-    placeholder=
-    "Enter the important terms and conditions..."
-)
-
-
-# ============================================================
-# EFFECTIVE DATE
-# ============================================================
 
 effective_date = st.date_input(
-
     "Effective Date",
-
     value=date.today()
 )
 
 
-# ============================================================
-# GENERATE BUTTON
-# ============================================================
+terms = st.text_area(
+    "Important Terms",
+    placeholder="Enter salary, duration, rent, confidentiality terms, responsibilities, etc.",
+    height=180
+)
 
-if st.button(
 
-    "Generate Document",
-
-    type="primary"
-):
-
-    # --------------------------------------------------------
-    # VALIDATION
-    # --------------------------------------------------------
+if st.button("Generate Legal Document", type="primary"):
 
     if not parties.strip():
-
-        st.warning(
-            "Please enter the parties."
-        )
+        st.error("Please enter the parties.")
 
     elif not terms.strip():
-
-        st.warning(
-            "Please enter the terms and conditions."
-        )
+        st.error("Please enter the important terms.")
 
     else:
 
-        data = {
-
-            "document_type":
-                document_type,
-
-            "parties":
-                parties,
-
-            "terms":
-                terms,
-
-            "effective_date":
-                str(effective_date)
+        payload = {
+            "document_type": document_type,
+            "parties": parties,
+            "terms": terms,
+            "effective_date": str(effective_date)
         }
-
 
         try:
 
-            # ------------------------------------------------
-            # FASTAPI REQUEST
-            # ------------------------------------------------
+            with st.spinner("Generating your legal document..."):
 
-            response = requests.post(
-
-                "http://127.0.0.1:8000/generate",
-
-                json=data,
-
-                timeout=120
-            )
-
-
-            # ------------------------------------------------
-            # SUCCESSFUL HTTP RESPONSE
-            # ------------------------------------------------
+                response = requests.post(
+                    BACKEND_URL,
+                    json=payload,
+                    timeout=120
+                )
 
             if response.status_code == 200:
 
                 result = response.json()
 
-
-                # ============================================
-                # GEMINI SUCCESS
-                # ============================================
-
                 if result.get("success"):
 
+                    document_content = result.get(
+                        "document",
+                        ""
+                    )
+
                     st.success(
+                        "Legal document generated successfully!"
+                    )
 
-                        "AI legal document generated successfully!"
+                    st.subheader("Editable Document Preview")
+
+                    edited_content = st.text_area(
+                        "Edit your document",
+                        value=document_content,
+                        height=500
                     )
 
 
-                    st.subheader(
-
-                        "Generated Legal Document"
-                    )
-
-
-                    generated_document = str(
-
-                        result.get(
-                            "document",
-                            ""
-                        )
-                    )
-
-
-                    # ----------------------------------------
-                    # EDITABLE PREVIEW
-                    # ----------------------------------------
-
-                    edited_document = st.text_area(
-
-                        "Preview / Edit Document",
-
-                        value=generated_document,
-
-                        height=600
-                    )
-
-
-                    st.divider()
-
-
-                    st.subheader(
-
-                        "Download Document"
-                    )
-
-
-                    # ========================================
-                    # TXT DOWNLOAD
-                    # ========================================
+                    # TXT download
 
                     st.download_button(
-
                         label="Download TXT",
-
-                        data=edited_document,
-
-                        file_name=
-                        "LegalEase_Document.txt",
-
+                        data=edited_content,
+                        file_name="LegalEase_Document.txt",
                         mime="text/plain"
                     )
 
 
-                    # ========================================
-                    # DOCX DOWNLOAD
-                    # ========================================
+                    # DOCX generation
 
-                    try:
+                    doc = Document()
 
-                        docx_data = create_docx(
+                    for line in edited_content.splitlines():
 
-                            edited_document
+                        if line.strip():
+
+                            doc.add_paragraph(line)
+
+                    docx_buffer = BytesIO()
+
+                    doc.save(docx_buffer)
+
+                    docx_buffer.seek(0)
+
+
+                    st.download_button(
+                        label="Download DOCX",
+                        data=docx_buffer,
+                        file_name="LegalEase_Document.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
+
+
+                    # PDF generation
+
+                    pdf = FPDF()
+
+                    pdf.set_auto_page_break(
+                        auto=True,
+                        margin=15
+                    )
+
+                    pdf.add_page()
+
+                    pdf.set_font(
+                        "Arial",
+                        size=11
+                    )
+
+
+                    for line in edited_content.splitlines():
+
+                        clean_line = re.sub(
+                            r"[^\x00-\x7F]+",
+                            "",
+                            line
                         )
 
+                        if clean_line.strip():
 
-                        st.download_button(
+                            pdf.multi_cell(
+                                0,
+                                7,
+                                clean_line
+                            )
 
-                            label="Download DOCX",
-
-                            data=docx_data,
-
-                            file_name=
-                            "LegalEase_Document.docx",
-
-                            mime=
-                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                        )
-
-                    except Exception as error:
-
-                        st.error(
-
-                            f"DOCX generation error: {error}"
-                        )
+                            pdf.ln(1)
 
 
-                    # ========================================
-                    # PDF DOWNLOAD
-                    # ========================================
-
-                    try:
-
-                        pdf_data = create_pdf(
-
-                            edited_document
-                        )
+                    pdf_bytes = bytes(
+                        pdf.output()
+                    )
 
 
-                        st.download_button(
-
-                            label="Download PDF",
-
-                            data=pdf_data,
-
-                            file_name=
-                            "LegalEase_Document.pdf",
-
-                            mime="application/pdf"
-                        )
-
-                    except Exception as error:
-
-                        st.error(
-
-                            f"PDF generation error: {error}"
-                        )
-
-
-                # ============================================
-                # GEMINI FAILURE
-                # ============================================
+                    st.download_button(
+                        label="Download PDF",
+                        data=pdf_bytes,
+                        file_name="LegalEase_Document.pdf",
+                        mime="application/pdf"
+                    )
 
                 else:
 
                     st.error(
-
-                        "Gemini could not generate the document."
-                    )
-
-                    st.code(
-
                         result.get(
-
                             "error",
-
-                            "Unknown backend error"
+                            "Document generation failed."
                         )
                     )
-
-
-            # ------------------------------------------------
-            # HTTP ERROR
-            # ------------------------------------------------
 
             else:
 
                 st.error(
-
-                    f"Backend returned an error: "
-                    f"{response.status_code}"
+                    f"Backend error: HTTP {response.status_code}"
                 )
 
-                st.code(
-                    response.text
-                )
+                st.code(response.text)
 
-
-        # ----------------------------------------------------
-        # FASTAPI CONNECTION ERROR
-        # ----------------------------------------------------
-
-        except requests.exceptions.ConnectionError:
-
-            st.error(
-
-                "FastAPI backend is not running. "
-                "Please start the FastAPI server first."
-            )
-
-
-        # ----------------------------------------------------
-        # TIMEOUT
-        # ----------------------------------------------------
 
         except requests.exceptions.Timeout:
 
             st.error(
-
-                "The AI request took too long. "
-                "Please try again."
+                "The request timed out. Please try again."
             )
 
 
-        # ----------------------------------------------------
-        # OTHER ERROR
-        # ----------------------------------------------------
+        except requests.exceptions.ConnectionError:
+
+            st.error(
+                "Could not connect to the LegalEase backend."
+            )
+
 
         except Exception as error:
 
             st.error(
-
-                f"Something went wrong: {error}"
+                f"Unexpected error: {error}"
             )
